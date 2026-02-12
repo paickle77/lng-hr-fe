@@ -184,16 +184,8 @@ const MyTimesheet = () => {
     console.log("[DEBUG1] Starting to generate days for month", CURRENT_MONTH + 1, "year", CURRENT_YEAR);
     for (let i = 1; i <= daysInMonth; i++) {
       const dateObj = new Date(CURRENT_YEAR, CURRENT_MONTH, i);
-      const dayOfWeek = dateObj.getDay();
+      const dayOfWeek = dateObj.getDay(); // 0 = CN, 6 = T7
       const isoDate = `${CURRENT_YEAR}-${pad2(CURRENT_MONTH + 1)}-${pad2(i)}`;
-      
-      // Lấy dữ liệu từ API theo ISO date key
-      const apiData = attendanceMap[isoDate];
-      
-      // Log chi tiết cho 5 ngày đầu và những ngày có data
-      if (i <= 5 || apiData) {
-        console.log(`[DEBUG1] Day ${i}: isoDate="${isoDate}", apiData exists=${!!apiData}, checkIn=${apiData?.checkIn}, checkOut=${apiData?.checkOut}`);
-      }
       
       let type = "work";
       let status = [];
@@ -202,41 +194,51 @@ const MyTimesheet = () => {
       let otHours = 0;
       let holidayName = "";
       let lateMinutes = 0;
+      let apiData = null;
 
-      // Xử lý cuối tuần (nếu không có dữ liệu từ API)
-      if (!apiData && (dayOfWeek === 0 || dayOfWeek === 6)) {
+      // ✅ LOGIC MỚI: Thứ 7 (6) và Chủ nhật (0) luôn là weekend, KHÔNG nhận data từ API
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
         type = "weekend";
-      }
-
-      // Nếu có dữ liệu từ API
-      if (apiData) {
-        checkIn = apiData.checkIn || null;
-        checkOut = apiData.checkOut || null;
-        lateMinutes = apiData.lateMinutes || 0;
-
-        // Xử lý status
-        if (apiData.status === "PAID_LEAVE") {
-          type = "leave";
-          status.push("leave");
-        } else if (apiData.status === "PRESENT") {
-          type = "work";
-        } else if (apiData.status === "ABSENT") {
-          type = "work";
-          status.push("absent");
-        }
+        // Không lấy dữ liệu từ API cho cuối tuần
+        console.log(`[DEBUG1] Day ${i} (${dayOfWeek === 0 ? 'CN' : 'T7'}): Force weekend, ignore API data`);
+      } else {
+        // Chỉ lấy dữ liệu API cho ngày thường (T2-T6)
+        apiData = attendanceMap[isoDate];
         
-        // Check late (áp dụng cho tất cả status)
-        if (lateMinutes > 0) {
-          status.push("late");
+        if (i <= 5 || apiData) {
+          console.log(`[DEBUG1] Day ${i}: isoDate="${isoDate}", apiData exists=${!!apiData}, checkIn=${apiData?.checkIn}, checkOut=${apiData?.checkOut}`);
         }
-        
-        // Check OT (áp dụng cho tất cả status)
-        const totalOT = (apiData.finalOtHours?.weekday || 0) + 
-                       (apiData.finalOtHours?.weekend || 0) + 
-                       (apiData.finalOtHours?.holiday || 0);
-        if (totalOT > 0) {
-          status.push("ot");
-          otHours = totalOT;
+
+        // Nếu có dữ liệu từ API (chỉ áp dụng cho T2-T6)
+        if (apiData) {
+          checkIn = apiData.checkIn || null;
+          checkOut = apiData.checkOut || null;
+          lateMinutes = apiData.lateMinutes || 0;
+
+          // Xử lý status
+          if (apiData.status === "PAID_LEAVE") {
+            type = "leave";
+            status.push("leave");
+          } else if (apiData.status === "PRESENT") {
+            type = "work";
+          } else if (apiData.status === "ABSENT") {
+            type = "work";
+            status.push("absent");
+          }
+          
+          // Check late (áp dụng cho tất cả status)
+          if (lateMinutes > 0) {
+            status.push("late");
+          }
+          
+          // Check OT (áp dụng cho tất cả status)
+          const totalOT = (apiData.finalOtHours?.weekday || 0) + 
+                         (apiData.finalOtHours?.weekend || 0) + 
+                         (apiData.finalOtHours?.holiday || 0);
+          if (totalOT > 0) {
+            status.push("ot");
+            otHours = totalOT;
+          }
         }
       }
 
@@ -253,7 +255,7 @@ const MyTimesheet = () => {
         lateMinutes,
         fullDate: `${pad2(i)}/${pad2(CURRENT_MONTH + 1)}/${CURRENT_YEAR}`,
         isoDate,
-        apiData, // Lưu toàn bộ data từ API để dùng sau
+        apiData, // Lưu toàn bộ data từ API để dùng sau (null cho weekend)
       });
     }
     
